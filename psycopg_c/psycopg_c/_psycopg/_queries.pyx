@@ -4,6 +4,9 @@ Utility module to manipulate queries
 
 # Copyright (C) 2020 The Psycopg Team
 
+from cpython.ref cimport Py_INCREF
+from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
+
 import re
 from typing import Any, Dict, List, Mapping, Match, NamedTuple, Optional
 from typing import Sequence, Tuple, Union, TYPE_CHECKING
@@ -12,7 +15,7 @@ from functools import lru_cache
 from psycopg import pq
 from psycopg import errors as e
 # from psycopg.sql import Composable
-from psycopg.abc import Buffer, Query, Params
+from psycopg.abc import Buffer
 from psycopg._enums import PyFormat
 from psycopg._encodings import conn_encoding
 
@@ -24,17 +27,18 @@ class QueryPart(NamedTuple):
     item: Union[int, str]
     format: PyFormat
 
+
 cdef class PostgresQuery:
     """
     Helper to convert a Python query and parameters into Postgres format.
     """
 
-    cdef bytes query
-    cdef object params
+    cdef readonly bytes query
+    cdef readonly object params
+    cdef readonly tuple types
+    cdef readonly list formats
     cdef Transformer _tx
-    cdef tuple types
     cdef list _want_formats
-    cdef list formats
     cdef list _parts
     cdef object _encoding
     cdef list _order
@@ -55,7 +59,7 @@ cdef class PostgresQuery:
         self.query = b""
         self._order: Optional[List[str]] = None
 
-    cpdef convert(self, query: Query, vars: Optional[Params]):
+    cpdef convert(self, query, vars):
         """
         Set up the query and parameters to convert.
 
@@ -86,7 +90,7 @@ cdef class PostgresQuery:
 
         self.dump(vars)
 
-    def dump(self, vars: Optional[Params]):
+    cpdef dump(self, vars):
         """
         Process a new set of variables on the query processed by `convert()`.
 
@@ -111,7 +115,7 @@ cdef class PostgresClientQuery(PostgresQuery):
 
     cdef bytes template;
 
-    cpdef convert(self, query: Query, vars: Optional[Params]):
+    cpdef convert(self, query, vars):
         """
         Set up the query and parameters to convert.
 
@@ -135,16 +139,27 @@ cdef class PostgresClientQuery(PostgresQuery):
 
         self.dump(vars)
 
-    def dump(self, vars: Optional[Params]):
+    cpdef dump(self, vars):
         """
         Process a new set of variables on the query processed by `convert()`.
 
         This method updates `params` and `types`.
         """
+        cdef Py_ssize_t nparams
+
         if vars is not None:
             params = _validate_and_reorder_params(self._parts, vars, self._order)
-            self.params = tuple(
-                self._tx.as_literal(p) if p is not None else b"NULL" for p in params)
+            nparams = len(params)
+            self.params = p = PyTuple_New(nparams)
+            for i in range(nparams):
+                item = params[i]
+                if item is not None:
+                    val = self._tx.as_literal(item)
+                else:
+                    val = b"NULL"
+                Py_INCREF(val)
+                PyTuple_SET_ITEM(p, i, val)
+
             self.query = self.template % self.params
         else:
             self.params = None
@@ -241,9 +256,7 @@ cdef _query2pg_client(
     return b"".join(chunks), order, parts
 
 #Returns Sequence[Any]
-cdef _validate_and_reorder_params(
-    parts: List[QueryPart], vars: Params, order: Optional[List[str]]
-):
+cdef _validate_and_reorder_params(parts, vars, order):
     """
     Verify the compatibility between a query and a set of params.
     """
@@ -303,8 +316,8 @@ _re_placeholder = re.compile(
 
 
 #Returns List[QueryPart]
-cdef list _split_query(
-    query: bytes, encoding: str = "ascii", collapse_double_percent: bool = True
+cpdef list _split_query(
+    query, encoding = "ascii", collapse_double_percent = True
 ):
     parts: List[Tuple[bytes, Optional[Match[bytes]]]] = []
     cur = 0
