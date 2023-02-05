@@ -9,12 +9,15 @@ from typing import Any, Dict, List, Mapping, Match, NamedTuple, Optional
 from typing import Sequence, Tuple, Union, TYPE_CHECKING
 from functools import lru_cache
 
-from . import pq
-from . import errors as e
-from .sql import Composable
-from .abc import Buffer, Query, Params
-from ._enums import PyFormat
-from ._encodings import conn_encoding
+from psycopg import pq
+from psycopg import errors as e
+# from psycopg.sql import Composable
+from psycopg.abc import Buffer, Query, Params
+from psycopg._enums import PyFormat
+from psycopg._encodings import conn_encoding
+
+Composable = None  # lazy loaded to avoid circular import
+
 
 class QueryPart(NamedTuple):
     pre: bytes
@@ -36,7 +39,7 @@ cdef class PostgresQuery:
     cdef object _encoding
     cdef list _order
 
-    def __cinit__(self, transformer: "Transformer"):
+    def __cinit__(self, Transformer transformer):
         self._tx = transformer
 
         self.params: Optional[Sequence[Optional[Buffer]]] = None
@@ -59,6 +62,10 @@ cdef class PostgresQuery:
         The results of this function can be obtained accessing the object
         attributes (`query`, `params`, `types`, `formats`).
         """
+        global Composable
+        if Composable is None:
+            from psycopg.sql import Composable
+
         if isinstance(query, str):
             bquery = query.encode(self._encoding)
         elif isinstance(query, Composable):
@@ -79,7 +86,6 @@ cdef class PostgresQuery:
 
         self.dump(vars)
 
-    @classmethod
     def dump(self, vars: Optional[Params]):
         """
         Process a new set of variables on the query processed by `convert()`.
@@ -96,6 +102,7 @@ cdef class PostgresQuery:
             self.params = None
             self.types = ()
             self.formats = None
+
 
 cdef class PostgresClientQuery(PostgresQuery):
     """
@@ -128,7 +135,6 @@ cdef class PostgresClientQuery(PostgresQuery):
 
         self.dump(vars)
 
-    @classmethod
     def dump(self, vars: Optional[Params]):
         """
         Process a new set of variables on the query processed by `convert()`.
@@ -279,6 +285,7 @@ cdef _validate_and_reorder_params(
                 "query parameter missing:"
                 f" {', '.join(sorted(i for i in order or () if i not in vars))}"
             )
+
 
 _re_placeholder = re.compile(
     rb"""(?x)
