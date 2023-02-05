@@ -263,3 +263,23 @@ class Transformer(Protocol):
 
     def get_loader(self, oid: int, format: pq.Format) -> Loader:
         ...
+
+
+class PostgresQuery(Protocol):
+    """
+    Helper to convert a Python query and parameters into Postgres format.
+    """
+
+    query: bytes
+    params: Optional[Sequence[Optional[Buffer]]]
+    formats: Optional[Sequence[pq.Format]]
+    types: Tuple[int, ...] = ()
+
+    def __init__(self, transformer: Transformer):
+        ...
+
+    def convert(self, query: Query, vars: Optional[Params]) -> None:
+        ...
+
+    def dump(self, vars: Optional[Params]) -> None:
+        ...
