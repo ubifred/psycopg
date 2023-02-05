@@ -16,6 +16,6 @@ Transformer: Type[abc.Transformer]
 if _psycopg:
     Transformer = _psycopg.Transformer
 else:
-    from . import _py_transformer
+    from . import _transformer_py
 
-    Transformer = _py_transformer.Transformer
+    Transformer = _transformer_py.Transformer
