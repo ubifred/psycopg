@@ -41,6 +41,7 @@ class BasePool:
     _CONNECTIONS_LOST = "connections_lost"
 
     _pool: deque[Any]
+    _given: dict[int, Any]
 
     def __init__(
         self,
@@ -80,6 +81,7 @@ class BasePool:
 
         self._nconns = min_size  # currently in the pool, out, being prepared
         self._pool = deque()
+        self._given = {}
         self._stats = Counter[str]()
 
         # Min number of connections in the pool in a max_idle unit of time.

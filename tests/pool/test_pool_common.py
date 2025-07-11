@@ -638,6 +638,30 @@ def test_check_timeout(pool_cls, dsn):
     assert time() - t0 <= 1.5
 
 
+@pytest.mark.crdb_skip("backend pid")
+def test_drain(pool_cls, dsn):
+    pids1 = set()
+    pids2 = set()
+    with pool_cls(dsn, min_size=min_size(pool_cls, 2)) as p:
+        p.wait()
+
+        with p.connection() as conn:
+            pids1.add(conn.info.backend_pid)
+            with p.connection() as conn2:
+                pids1.add(conn2.info.backend_pid)
+                p.drain()
+        assert len(pids1) == 2
+
+        with p.connection() as conn:
+            pids2.add(conn.info.backend_pid)
+            with p.connection() as conn2:
+                pids2.add(conn2.info.backend_pid)
+
+        assert len(pids2) == 2
+
+    assert not pids1 & pids2
+
+
 @skip_sync
 def test_cancellation_in_queue(pool_cls, dsn):
     # https://github.com/psycopg/psycopg/issues/509

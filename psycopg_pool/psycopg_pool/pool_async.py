@@ -37,6 +37,7 @@ logger = logging.getLogger("psycopg.pool")
 
 class AsyncConnectionPool(Generic[ACT], BasePool):
     _pool: deque[ACT]
+    _given: dict[int, ACT]
 
     def __init__(
         self,
@@ -299,6 +300,7 @@ class AsyncConnectionPool(Generic[ACT], BasePool):
         if self._pool:
             # Take a connection ready out of the pool
             conn = self._pool.popleft()
+            self._given[id(conn)] = conn
             if len(self._pool) < self._nconns_min:
                 self._nconns_min = len(self._pool)
         elif self.max_waiting and len(self._waiting) >= self.max_waiting:
@@ -342,6 +344,31 @@ class AsyncConnectionPool(Generic[ACT], BasePool):
             return
 
         await self._putconn(conn, from_getconn=False)
+
+    async def drain(self) -> None:
+        """
+        Remove all the connections from the pool and create new ones.
+
+        If a connection is currently out of the pool it will be closed when
+        returned to the pool and replaced with a new one.
+
+        This method is useful to force a connection re-configuration, for
+        example when the adapters map changes after the pool was created.
+        """
+        async with self._lock:
+            conns = list(self._pool)
+            self._pool.clear()
+
+            # Mark the currently given connections as already expired,
+            # so they will be closed as soon as returned.
+            earlier = monotonic() - 1.0
+            for conn in self._given.values():
+                conn._expire_at = earlier
+
+        # Close the connection already in the pool, open new ones.
+        for conn in conns:
+            await conn.close()
+            self.run_task(AddConnection(self))
 
     async def _putconn(self, conn: ACT, from_getconn: bool) -> None:
         # Use a worker to perform eventual maintenance work in a separate task
@@ -786,6 +813,7 @@ class AsyncConnectionPool(Generic[ACT], BasePool):
                     break
             else:
                 # No client waiting for a connection: put it back into the pool
+                self._given.pop(id(conn), None)
                 self._pool.append(conn)
                 # If we have been asked to wait for pool init, notify the
                 # waiter if the pool is full.
