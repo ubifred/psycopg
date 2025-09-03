@@ -105,7 +105,7 @@ if [ "$ID" == "centos" ] || [ "$ID" == "macos" ]; then
         pushd "${openssl_dir}"
 
         options=(--prefix=${LIBPQ_BUILD_PREFIX} --openssldir=${LIBPQ_BUILD_PREFIX} \
-            zlib -fPIC shared)
+            zlib -fPIC shared --debug)
         if [ -z "${MACOSX_ARCHITECTURE:-}" ]; then
             ./config $options
         else
