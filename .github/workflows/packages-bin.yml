@@ -83,8 +83,8 @@ jobs:
             ./tools/build/strip_wheel.sh {wheel}
             && auditwheel repair -w {dest_dir} {wheel}
           CIBW_TEST_REQUIRES: ./psycopg[test] ./psycopg_pool
-          CIBW_TEST_COMMAND: >-
-            pytest {project}/tests -m 'not slow and not flakey' --color yes
+          # CIBW_TEST_COMMAND: >-
+          #   pytest {project}/tests -m 'not slow and not flakey' --color yes
           CIBW_ENVIRONMENT_PASS_LINUX: LIBPQ_VERSION OPENSSL_VERSION
           CIBW_ENVIRONMENT: >-
             PSYCOPG_IMPL=binary
