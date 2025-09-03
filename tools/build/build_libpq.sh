@@ -250,4 +250,4 @@ make -C src/bin/pg_config install
 make -C src/include install
 popd
 
-find ${LIBPQ_BUILD_PREFIX} -name \*.${library_suffix}.\* -type f -exec strip --strip-unneeded {} \;
+# find ${LIBPQ_BUILD_PREFIX} -name \*.${library_suffix}.\* -type f -exec strip --strip-unneeded {} \;
